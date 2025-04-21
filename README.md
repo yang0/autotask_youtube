@@ -24,6 +24,10 @@ AutoTask has a built-in MCP server. After installing the plugin, you can call pl
 - MCP server address: `http://localhost:8283/mcp/sse`
 - Copy this address to Cursor or other development environments to use plugin functions via MCP protocol
 
+## Cookie File
+
+For videos requiring login, you can generate the required cookie file directly using AutoTask software.
+
 ## Features
 
 - Download single videos, playlists, and entire channels
@@ -34,15 +38,6 @@ AutoTask has a built-in MCP server. After installing the plugin, you can call pl
 - Support for login-required videos (via cookies)
 - Customizable output format and quality
 - Resume downloads and error retry
-
-## Requirements
-
-1. Install dependencies:
-```bash
-pip install -r requirements.txt
-```
-
-2. Make sure ffmpeg is installed on your system (for audio extraction and format conversion)
 
 ## Available Nodes
 
@@ -151,14 +146,6 @@ Searches for videos on YouTube.
 - `descriptions`: List of video descriptions
 - `durations`: List of video durations
 
-## Cookie File Authentication
-
-To download age-restricted or private videos, you need to provide a cookie file from your browser. You can export cookies using browser extensions like "Get cookies.txt" or "Cookie-Editor".
-
-Supported cookie file formats:
-1. Netscape format .txt files
-2. JSON format cookie files (will be automatically converted to Netscape format)
-
 ## Important Notes
 
 1. Ensure sufficient disk space for downloaded videos
@@ -170,7 +157,5 @@ Supported cookie file formats:
 ## License
 
 This plugin is licensed under the MIT License. See the LICENSE file for details.
-
-AutoTask.dev
 
 AutoTask.dev User Id: buKkhpRSxA9LT4zZ6GDKH9

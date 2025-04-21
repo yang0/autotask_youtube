@@ -24,6 +24,10 @@ AutoTask 内置了 MCP 服务器，安装插件后你可以通过 MCP 接口在�
 - MCP 服务器地址：`http://localhost:8283/mcp/sse`
 - 将此地址复制到 Cursor 或其他开发环境中即可通过 MCP 协议调用插件功能
 
+## Cookie 文件
+
+对于需要登录的视频，可以直接使用 AutoTask 软件生成所需的 cookie 文件。
+
 ## 功能特点
 
 - 支持下载单个视频、播放列表和整个频道
@@ -151,14 +155,6 @@ pip install -r requirements.txt
 - `descriptions`：视频描述列表
 - `durations`：视频时长列表
 
-## Cookie 文件认证
-
-要下载需要登录或年龄限制的视频，你需要提供浏览器的 cookie 文件。可以使用浏览器扩展（如 "Get cookies.txt" 或 "Cookie-Editor"）导出 cookie。
-
-支持的 cookie 文件格式：
-1. Netscape 格式的 .txt 文件
-2. JSON 格式的 cookie 文件（会自动转换为 Netscape 格式）
-
 ## 使用示例
 
 ### 下载单个视频
@@ -217,10 +213,11 @@ for i, (path, title, duration, subs) in enumerate(zip(
 2. 对于大型播放列表或频道，建议使用 `playlist_start` 和 `playlist_end` 分批下载
 3. 如果下载速度较慢，可以尝试使用不同的视频格式
 4. 对于受限制的视频，确保提供有效的 cookie 文件
-5. 音频提取需要安装 ffmpeg
-6. 所有字幕都将以 VTT 格式保存
+5. 所有字幕都将以 VTT 格式保存
 
 ## 许可证
 
 本插件基于 MIT 许可证开源。详见 LICENSE 文件。
+
+AutoTask.dev User Id: buKkhpRSxA9LT4zZ6GDKH9
 
