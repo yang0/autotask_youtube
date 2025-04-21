@@ -5,7 +5,6 @@ except ImportError:
 
 import os
 import sys
-import signal
 import tempfile
 import json
 from typing import Dict, Any
@@ -96,24 +95,19 @@ class YouTubeDownloadNode(Node):
     def __init__(self):
         super().__init__()
         self._ydl = None
-        self._original_handler = None
+        self._is_interrupted = False
 
-    def _interrupt_handler(self, signum, frame):
-        """Custom interrupt handler for youtube-dl"""
-        if self._ydl:
-            # Restore original handler
-            signal.signal(signal.SIGINT, self._original_handler)
-            # Raise KeyboardInterrupt to stop youtube-dl
-            raise KeyboardInterrupt()
+    def _progress_hook(self, d):
+        """Progress hook to check for interruption during download"""
+        if self._is_interrupted:
+            raise Exception("Download interrupted by user")
 
     async def stop(self) -> None:
         """
         Stop the node execution when interrupted.
-        This method will send an interrupt signal to youtube-dl.
+        This method will stop the youtube-dl download process.
         """
-        if self._ydl:
-            # Send interrupt signal to current process
-            os.kill(os.getpid(), signal.SIGINT)
+        self._is_interrupted = True
 
     async def execute(self, node_inputs: Dict[str, Any], workflow_logger) -> Dict[str, Any]:
         try:
@@ -136,7 +130,8 @@ class YouTubeDownloadNode(Node):
             ydl_opts = {
                 'format': format,
                 'outtmpl': os.path.join(output_dir, '%(title)s.%(ext)s'),
-                'verbose': True  # Add verbose mode for debugging
+                'verbose': True,  # Add verbose mode for debugging
+                'progress_hooks': [self._progress_hook]  # Add progress hook to check for interruption
             }
 
             # Add cookie file if provided
@@ -162,11 +157,6 @@ class YouTubeDownloadNode(Node):
             print(ydl_opts)
             print("=============")
 
-            # Store original SIGINT handler
-            self._original_handler = signal.getsignal(signal.SIGINT)
-            # Set our custom handler
-            signal.signal(signal.SIGINT, self._interrupt_handler)
-
             try:
                 with youtube_dl.YoutubeDL(ydl_opts) as ydl:
                     self._ydl = ydl
@@ -177,6 +167,13 @@ class YouTubeDownloadNode(Node):
                     except Exception as info_error:
                         workflow_logger.error(f"Failed to extract video info: {str(info_error)}")
                         raise
+
+                    if self._is_interrupted:
+                        workflow_logger.info("Download was interrupted after info extraction")
+                        return {
+                            "success": False,
+                            "error_message": "Download interrupted after info extraction"
+                        }
 
                     # Then proceed with download
                     info = ydl.extract_info(url, download=True)
@@ -196,17 +193,16 @@ class YouTubeDownloadNode(Node):
                         "duration": info.get('duration', 0),
                     }
             finally:
-                # Restore original SIGINT handler
-                signal.signal(signal.SIGINT, self._original_handler)
                 self._ydl = None
+                self._is_interrupted = False
 
-        except KeyboardInterrupt:
-            workflow_logger.info("Download interrupted by user")
-            return {
-                "success": False,
-                "error_message": "Download interrupted by user"
-            }
         except Exception as e:
+            if "Download interrupted by user" in str(e):
+                workflow_logger.info("Download interrupted by user")
+                return {
+                    "success": False,
+                    "error_message": "Download interrupted by user"
+                }
             workflow_logger.error(f"YouTube download failed: {str(e)}")
             return {
                 "success": False,
