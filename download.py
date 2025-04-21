@@ -64,6 +64,27 @@ class YouTubeDownloadNode(Node):
             "default": 5,
             "required": False,
         },
+        "write_subs": {
+            "label": "Download Subtitles",
+            "description": "Download subtitles if available",
+            "type": "BOOLEAN",
+            "default": False,
+            "required": False,
+        },
+        "write_auto_subs": {
+            "label": "Download Auto-generated Subtitles",
+            "description": "Download auto-generated subtitles if available",
+            "type": "BOOLEAN",
+            "default": False,
+            "required": False,
+        },
+        "sub_langs": {
+            "label": "Subtitle Languages",
+            "description": "Comma-separated list of subtitle languages to download (e.g., 'en,zh-CN'). Use 'all' for all languages.",
+            "type": "STRING",
+            "default": "en",
+            "required": False,
+        },
         "cookie_file": {
             "label": "Cookie File",
             "description": "Path to a cookie file for authentication (e.g., 'www.youtube.com.json')",
@@ -89,6 +110,11 @@ class YouTubeDownloadNode(Node):
             "label": "Duration",
             "description": "Duration of the video in seconds",
             "type": "INT",
+        },
+        "subtitle_files": {
+            "label": "Subtitle Files",
+            "description": "List of paths to downloaded subtitle files",
+            "type": "LIST",
         },
     }
 
@@ -118,6 +144,11 @@ class YouTubeDownloadNode(Node):
             audio_format = node_inputs.get("audio_format", "mp3")
             audio_quality = node_inputs.get("audio_quality", 5)
             cookie_file = node_inputs.get("cookie_file", "")
+            
+            # 字幕相关参数
+            write_subs = node_inputs.get("write_subs", False)
+            write_auto_subs = node_inputs.get("write_auto_subs", False)
+            sub_langs = node_inputs.get("sub_langs", "en")
 
             workflow_logger.info(f"Starting download of YouTube video: {url}")
 
@@ -126,12 +157,17 @@ class YouTubeDownloadNode(Node):
                 output_dir = tempfile.mkdtemp()
                 workflow_logger.info(f"Using temporary directory: {output_dir}")
 
-            # Configure youtube-dl options - match the working test configuration
+            # Configure youtube-dl options
             ydl_opts = {
                 'format': format,
                 'outtmpl': os.path.join(output_dir, '%(title)s.%(ext)s'),
                 'verbose': True,  # Add verbose mode for debugging
-                'progress_hooks': [self._progress_hook]  # Add progress hook to check for interruption
+                'progress_hooks': [self._progress_hook],  # Add progress hook to check for interruption
+                'writesubtitles': write_subs,  # 是否下载字幕
+                'writeautomaticsub': write_auto_subs,  # 是否下载自动生成的字幕
+                'subtitleslangs': sub_langs.split(',') if sub_langs != 'all' else ['all'],  # 字幕语言列表
+                'subtitlesformat': 'vtt',  # 固定使用vtt格式
+                'restrictfilenames': True,  # 避免文件名中的特殊字符
             }
 
             # Add cookie file if provided
@@ -184,13 +220,26 @@ class YouTubeDownloadNode(Node):
                     else:
                         file_path = os.path.join(output_dir, f"{info['title']}.{info['ext']}")
 
+                    # 获取字幕文件路径
+                    subtitle_files = []
+                    if (write_subs or write_auto_subs) and 'requested_subtitles' in info:
+                        base_name = os.path.splitext(file_path)[0]
+                        for lang in info['requested_subtitles']:
+                            sub_file = f"{base_name}.{lang}.vtt"
+                            if os.path.exists(sub_file):
+                                subtitle_files.append(sub_file)
+                                workflow_logger.info(f"Found subtitle file: {sub_file}")
+
                     workflow_logger.info(f"Download completed: {file_path}")
+                    if subtitle_files:
+                        workflow_logger.info(f"Downloaded {len(subtitle_files)} subtitle files")
                     
                     return {
                         "success": True,
                         "file_path": file_path,
                         "title": info.get('title', ''),
                         "duration": info.get('duration', 0),
+                        "subtitle_files": subtitle_files,
                     }
             finally:
                 self._ydl = None

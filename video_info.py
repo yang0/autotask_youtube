@@ -12,6 +12,28 @@ from typing import Dict, Any
 sys.path.append(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'youtube-dl'))
 import youtube_dl
 
+# Import cookie utilities
+from .cookie_utils import get_cookie_file
+import traceback
+
+
+def convert_to_serializable(obj):
+    """Convert youtube-dl response to JSON serializable format"""
+    try:
+        # Try to convert to JSON first to check if it's already serializable
+        json.dumps(obj)
+        return obj
+    except (TypeError, ValueError):
+        if isinstance(obj, (list, youtube_dl.utils.LazyList)):
+            return [convert_to_serializable(item) for item in list(obj)]
+        elif isinstance(obj, dict):
+            return {str(key): convert_to_serializable(value) for key, value in obj.items()}
+        elif hasattr(obj, '__dict__'):
+            return convert_to_serializable(obj.__dict__)
+        elif hasattr(obj, '__str__'):
+            return str(obj)
+        return None
+
 
 @register_node
 class YouTubeVideoInfoNode(Node):
@@ -113,13 +135,21 @@ class YouTubeVideoInfoNode(Node):
             }
 
             # Add cookie file if provided
-            if cookie_file and os.path.exists(cookie_file):
-                workflow_logger.info(f"Using cookie file: {cookie_file}")
-                ydl_opts['cookiefile'] = cookie_file
+            if cookie_file:
+                # Convert cookie file if needed
+                netscape_cookie_file = get_cookie_file(cookie_file)
+                if netscape_cookie_file:
+                    workflow_logger.info(f"Using cookie file: {netscape_cookie_file}")
+                    ydl_opts['cookiefile'] = netscape_cookie_file
+                else:
+                    workflow_logger.warning(f"Failed to process cookie file: {cookie_file}")
 
             # Extract the video info without downloading
             with youtube_dl.YoutubeDL(ydl_opts) as ydl:
                 info = ydl.extract_info(url, download=False)
+                
+                # Convert info to serializable format
+                info = convert_to_serializable(info)
                 
                 # Get available formats
                 formats = []
@@ -134,7 +164,8 @@ class YouTubeVideoInfoNode(Node):
                 
                 workflow_logger.info(f"Information extracted successfully")
                 
-                return {
+                # Prepare the response data
+                response_data = {
                     "success": True,
                     "title": info.get('title', ''),
                     "description": info.get('description', ''),
@@ -147,10 +178,19 @@ class YouTubeVideoInfoNode(Node):
                     "comment_count": info.get('comment_count', 0),
                     "thumbnail_url": info.get('thumbnail', ''),
                     "formats": formats_str,
-                    "raw_info": json.dumps(info, indent=2),
                 }
+                
+                # Convert info to JSON string separately to handle any remaining serialization issues
+                try:
+                    response_data["raw_info"] = json.dumps(info, indent=2)
+                except (TypeError, ValueError) as json_error:
+                    workflow_logger.warning(f"Failed to serialize raw info: {str(json_error)}")
+                    response_data["raw_info"] = str(info)
+                
+                return response_data
 
         except Exception as e:
+            traceback.print_exc()
             workflow_logger.error(f"YouTube video info extraction failed: {str(e)}")
             return {
                 "success": False,
