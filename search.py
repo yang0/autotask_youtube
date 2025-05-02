@@ -9,8 +9,8 @@ from typing import Dict, Any, List
 
 # Add youtube-dl to the path
 sys.path.append(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'youtube-dl'))
-import youtube_dl
 
+from .youtube_dl_lazy import _get_youtube_dl
 
 @register_node
 class YouTubeSearchNode(Node):
@@ -108,6 +108,7 @@ class YouTubeSearchNode(Node):
 
             # Search for videos
             videos = []
+            youtube_dl = _get_youtube_dl()
             with youtube_dl.YoutubeDL(ydl_opts) as ydl:
                 # Extract the search results
                 results = ydl.extract_info(f"ytsearch{max_results}:{search_query}", download=False)

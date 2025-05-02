@@ -1,5 +1,5 @@
 import os
-import youtube_dl
+from .youtube_dl_lazy import _get_youtube_dl
 try:
     from autotask.nodes import Node, register_node
 except ImportError:
@@ -150,6 +150,7 @@ class YouTubeChannelDownloadNode(Node):
                 })
 
             try:
+                youtube_dl = _get_youtube_dl()
                 with youtube_dl.YoutubeDL(ydl_opts) as ydl:
                     self._ydl = ydl
                     # Extract channel information

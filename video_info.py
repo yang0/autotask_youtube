@@ -10,7 +10,7 @@ from typing import Dict, Any
 
 # Add youtube-dl to the path
 sys.path.append(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'youtube-dl'))
-import youtube_dl
+from .youtube_dl_lazy import _get_youtube_dl       
 
 # Import cookie utilities
 from .cookie_utils import get_cookie_file
@@ -24,7 +24,7 @@ def convert_to_serializable(obj):
         json.dumps(obj)
         return obj
     except (TypeError, ValueError):
-        if isinstance(obj, (list, youtube_dl.utils.LazyList)):
+        if isinstance(obj, (list, _get_youtube_dl.utils.LazyList)):
             return [convert_to_serializable(item) for item in list(obj)]
         elif isinstance(obj, dict):
             return {str(key): convert_to_serializable(value) for key, value in obj.items()}
@@ -145,6 +145,7 @@ class YouTubeVideoInfoNode(Node):
                     workflow_logger.warning(f"Failed to process cookie file: {cookie_file}")
 
             # Extract the video info without downloading
+            youtube_dl = _get_youtube_dl()
             with youtube_dl.YoutubeDL(ydl_opts) as ydl:
                 info = ydl.extract_info(url, download=False)
                 

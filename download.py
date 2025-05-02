@@ -9,7 +9,7 @@ import tempfile
 import json
 from typing import Dict, Any
 
-from . import youtube_dl
+from .youtube_dl_lazy import _get_youtube_dl    
 
 # Import cookie utilities
 from .cookie_utils import get_cookie_file
@@ -194,6 +194,7 @@ class YouTubeDownloadNode(Node):
             print("=============")
 
             try:
+                youtube_dl = _get_youtube_dl()
                 with youtube_dl.YoutubeDL(ydl_opts) as ydl:
                     self._ydl = ydl
                     # First try to extract info without downloading

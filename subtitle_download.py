@@ -10,7 +10,7 @@ from typing import Dict, Any
 
 # Add youtube-dl to the path
 sys.path.append(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'youtube-dl'))
-import youtube_dl
+from .youtube_dl_lazy import _get_youtube_dl
 
 # Import cookie utilities
 from .cookie_utils import get_cookie_file
@@ -19,7 +19,7 @@ from .cookie_utils import get_cookie_file
 @register_node
 class YouTubeSubtitleDownloadNode(Node):
     NAME = "YouTube Subtitle Download"
-    DESCRIPTION = "Download subtitles from a YouTube video"
+    DESCRIPTION = "Download subtitles from a YouTube video"     
 
     INPUTS = {
         "url": {
@@ -130,6 +130,7 @@ class YouTubeSubtitleDownloadNode(Node):
 
             # Download the subtitles
             try:
+                youtube_dl = _get_youtube_dl()
                 with youtube_dl.YoutubeDL(ydl_opts) as ydl:
                     self._ydl = ydl
                     # First, extract the video info without downloading

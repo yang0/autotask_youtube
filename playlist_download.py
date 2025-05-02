@@ -11,11 +11,10 @@ from typing import Dict, Any
 
 # Add youtube-dl to the path
 sys.path.append(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'youtube-dl'))
-import youtube_dl
 
 # Import cookie utilities
 from .cookie_utils import get_cookie_file
-
+from .youtube_dl_lazy import _get_youtube_dl
 
 @register_node
 class YouTubePlaylistDownloadNode(Node):
@@ -264,6 +263,7 @@ class YouTubePlaylistDownloadNode(Node):
             errors = []
             
             try:
+                youtube_dl = _get_youtube_dl()
                 with youtube_dl.YoutubeDL(ydl_opts) as ydl:
                     self._ydl = ydl
                     # First extract playlist info without downloading
