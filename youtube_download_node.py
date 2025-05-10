@@ -106,7 +106,7 @@ class YouTubeDownloadNode(Node):
                 user_langs = ["en", "en-US", "zh-Hans"]  # 如果没有指定语言，使用默认值
             workflow_logger.info(f"Will try to download subtitles for languages: {user_langs}")
 
-            # 先用yt-dlp获取所有可用字幕track id
+            # 先用yt-dlp获取所有可用字幕track id和formats，只获取一次info
             info_opts = {
                 'quiet': True,
                 'no_warnings': True,
@@ -137,26 +137,73 @@ class YouTubeDownloadNode(Node):
 
             # 确保下载路径存在
             os.makedirs(path, exist_ok=True)
-            
             workflow_logger.info(f"Starting download from: {url}")
 
-            # 根据是否分离音轨设置不同的格式
+            # --------- 只用一次info，分析formats，生成format_str ---------
+            formats = info.get('formats', [])
+            # 1. 找到最优视频流
+            video_candidates = [f for f in formats if f.get('vcodec') != 'none' and f.get('acodec') == 'none']
+            video = next((f for f in video_candidates if f.get('ext') == 'mp4'), None)
+            if not video:
+                video = next((f for f in video_candidates if f.get('ext') == 'webm'), None)
+            if not video and video_candidates:
+                video = video_candidates[0]
+            # 2. 找到最优音频流
+            audio_candidates = [f for f in formats if f.get('acodec') != 'none' and f.get('vcodec') == 'none']
+            audio = next((f for f in audio_candidates if f.get('ext') == 'm4a'), None)
+            if not audio:
+                audio = next((f for f in audio_candidates if f.get('ext') == 'webm'), None)
+            if not audio and audio_candidates:
+                audio = audio_candidates[0]
+            # 3. 找到合并流（有音视频）
+            combined = next((f for f in formats if f.get('vcodec') != 'none' and f.get('acodec') != 'none'), None)
+            # 4. 根据分离音频选项生成format_str
             if separate_audio:
-                format_str = f'bv*[height<={quality[:-1]}],ba' if quality != 'best' else 'bv*,ba'
-                workflow_logger.info("Will download video and audio separately")
+                if video and audio:
+                    format_str = f"{video['format_id']},{audio['format_id']}"  # 用逗号分隔，分别下载
+                elif video:
+                    format_str = video['format_id']
+                elif audio:
+                    format_str = audio['format_id']
+                else:
+                    raise Exception('No suitable video/audio format found!')
+                workflow_logger.info(f"Will download video and audio separately: {format_str}")
+                outtmpl = f'{path}/%(title)s.f%(format_id)s.%(ext)s'  # 区分音视频文件名
+                ydl_opts = {
+                    'format': format_str,
+                    'outtmpl': outtmpl,
+                    'progress_hooks': [self._progress_hook],
+                    'quiet': False,
+                    'no_warnings': False,
+                    'verbose': True
+                    # 不要加'merge_output_format'
+                }
             else:
-                format_str = f'bv*[height<={quality[:-1]}]+ba/b[height<={quality[:-1]}]' if quality != 'best' else 'bv*+ba/b'
-                workflow_logger.info("Will download video with merged audio")
+                if combined:
+                    format_str = combined['format_id']
+                    workflow_logger.info(f"Will download combined stream: {format_str}")
+                elif video and audio:
+                    format_str = f"{video['format_id']}+{audio['format_id']}"
+                    workflow_logger.info(f"Will merge video and audio: {format_str}")
+                elif video:
+                    format_str = video['format_id']
+                    workflow_logger.info(f"Will download video only: {format_str}")
+                elif audio:
+                    format_str = audio['format_id']
+                    workflow_logger.info(f"Will download audio only: {format_str}")
+                else:
+                    raise Exception('No suitable format found!')
+                ydl_opts = {
+                    'format': format_str,
+                    'outtmpl': f'{path}/%(title)s.%(ext)s',
+                    'progress_hooks': [self._progress_hook],
+                    'quiet': False,
+                    'no_warnings': False,
+                    'verbose': True,
+                    'merge_output_format': 'mp4'  # 合并时才设置
+                }
+            # ----------------------------------------------------------
 
-            ydl_opts = {
-                'format': format_str,
-                'outtmpl': f'{path}/%(title)s.%(ext)s',
-                'progress_hooks': [self._progress_hook],
-                'quiet': False,
-                'no_warnings': False,
-                'verbose': True,
-                'merge_output_format': 'mp4'  # 确保输出为MP4格式
-            }
             # 如果有匹配到的字幕track，添加到下载参数
             if matched_tracks:
                 ydl_opts.update({
@@ -167,7 +214,6 @@ class YouTubeDownloadNode(Node):
                 })
             else:
                 workflow_logger.info("No subtitle languages specified, will not download subtitles")
-
             # 处理cookie文件
             if cookie_file:
                 netscape_cookie_file = get_cookie_file(cookie_file)
@@ -176,27 +222,21 @@ class YouTubeDownloadNode(Node):
                     ydl_opts['cookiefile'] = netscape_cookie_file
                 else:
                     workflow_logger.warning("Invalid cookie file format")
-
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 self._ydl = ydl
                 workflow_logger.info("Downloading video and subtitles...")
                 info = ydl.extract_info(url, download=True)
                 filename = ydl.prepare_filename(info)
                 base_filename, _ = os.path.splitext(filename)
-
                 # 检查所有相关文件（视频、音频、字幕）
                 downloaded_files = []
-                # 收集所有以base_filename开头的文件（视频、音频、字幕等）
                 dir_files = os.listdir(path)
                 for f in dir_files:
-                    # 兼容windows和linux路径
                     full_path = os.path.join(path, f)
                     if os.path.isfile(full_path) and os.path.splitext(full_path)[0] == base_filename:
                         downloaded_files.append(full_path)
-                # 兜底：如果没找到任何文件，至少返回主视频文件
                 if not downloaded_files:
                     downloaded_files.append(filename)
-                # 兼容旧逻辑，补充字幕文件
                 if matched_tracks:
                     for lang in matched_tracks:
                         subtitle_file = f"{base_filename}.{lang}.vtt"
